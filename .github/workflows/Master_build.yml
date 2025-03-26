@@ -23,7 +23,7 @@ jobs:
 
     - name: Install Visual Studio components
       run: |
-        choco install visualstudio2019-workload-vctools --version=16.11.3 -y
+        choco install visualstudio2019-workload-vctools -y
         
     - name: Get commit count
       id: vars
