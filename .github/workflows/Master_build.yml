@@ -1,0 +1,62 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+    - master
+    - Joy
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+        
+    - name: Get commit count
+      id: vars
+      run: |
+        $count = git rev-list --count HEAD
+        echo "count=$count" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+      
+    - name: Build Solution
+      run: |
+        dotnet restore
+        dotnet build --configuration Release --no-restore
+        
+    - name: Update Version
+      run: |
+        $version = [Xml](Get-Content CodeWalker.csproj).Project.PropertyGroup.Version
+        $newVersion = "$version.${{ steps.vars.outputs.count }}"
+        (Get-Content CodeWalker.csproj) -replace "<Version>$version</Version>", "<Version>$newVersion</Version>" | Set-Content CodeWalker.csproj
+      shell: pwsh
+      
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.vars.outputs.count }}
+        release_name: Release v${{ steps.vars.outputs.count }}
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/Release/net8.0/CodeWalker.dll
+        asset_name: CodeWalker.dll
+        asset_content_type: application/octet-stream
