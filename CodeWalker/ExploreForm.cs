@@ -33,6 +33,7 @@ namespace CodeWalker
         private List<MainListItem> CurrentFiles;
         private bool FirstRefreshed = false;
         private List<MainListItem> CopiedFiles = new List<MainListItem>();
+        private bool DropFolderCreated;
 
         private Stack<MainTreeFolder> BackSteps = new Stack<MainTreeFolder>();
         private Stack<MainTreeFolder> ForwardSteps = new Stack<MainTreeFolder>();
@@ -3468,6 +3469,18 @@ namespace CodeWalker
                     path = path.Substring(0, bsind);
                 }
                 Navigate(path);
+                for (int i = 0; i < CurrentFiles?.Count; i++)
+                {
+                    if (CurrentFiles[i].Name == file.Name)
+                    {
+                        MainListView.BeginUpdate();
+                        MainListView.SelectedIndices.Clear();
+                        MainListView.SelectedIndices.Add(i);
+                        MainListView.EnsureVisible(i);
+                        MainListView.EndUpdate();
+                        break;
+                    }
+                }
             }
         }
         private void OpenFolder()
@@ -3604,10 +3617,12 @@ namespace CodeWalker
             {
                 Directory.CreateDirectory(dir);
             }
+            DropFolderCreated = true;
             return dir;
         }
         private void CleanupDropFolder()
         {
+            if (DropFolderCreated == false) return;
             string drop = GetDropFolder();
             if (Directory.Exists(drop))
             {
