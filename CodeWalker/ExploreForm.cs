@@ -537,6 +537,8 @@ namespace CodeWalker
             GoButton.Enabled = true;
             RefreshButton.Enabled = true;
             SearchButton.Enabled = true;
+            SearchButton.Checked = false;
+            SearchFilterButton.Checked = false;
             EditModeButton.Enabled = true;
         }
 
@@ -824,7 +826,7 @@ namespace CodeWalker
 
                         node = CreateRpfTreeFolder(rpf, relpath, path);
 
-                        RecurseMainTreeViewRPF(node, allRpfs);
+                        RecurseMainTreeViewRPF(node, allRpfs, extra ? f.Path : null);
 
                         if (parentnode != null)
                         {
@@ -868,9 +870,13 @@ namespace CodeWalker
             }
 
         }
-        private void RecurseMainTreeViewRPF(MainTreeFolder f, List<RpfFile> allRpfs)
+        private void RecurseMainTreeViewRPF(MainTreeFolder f, List<RpfFile> allRpfs, string rootpath = null)
         {
-            var rootpath = GTAFolder.GetCurrentGTAFolderWithTrailingSlash();
+            var gamepath = GTAFolder.GetCurrentGTAFolderWithTrailingSlash();
+            if (rootpath == null)
+            {
+                rootpath = gamepath;
+            }
 
             var fld = f.RpfFolder;
             if (fld != null)
@@ -882,13 +888,13 @@ namespace CodeWalker
                         var relpath = dir.Path.Substring(fld.Path.Length);
                         var fullpath = f.FullPath + relpath;
                         var dirpath = dir.Path;
-                        if (fullpath.StartsWith(rootpath, StringComparison.InvariantCultureIgnoreCase) == false)
+                        if (fullpath.StartsWith(gamepath, StringComparison.InvariantCultureIgnoreCase) == false)
                         {
                             dirpath = fullpath;
                         }
                         var dtnf = CreateRpfDirTreeFolder(dir, dirpath, fullpath);
                         f.AddChild(dtnf);
-                        RecurseMainTreeViewRPF(dtnf, allRpfs);
+                        RecurseMainTreeViewRPF(dtnf, allRpfs, rootpath);
                     }
                 }
             }
@@ -902,9 +908,10 @@ namespace CodeWalker
                 {
                     foreach (var child in rpf.Children)
                     {
-                        var ctnf = CreateRpfTreeFolder(child, child.Path, rootpath + child.Path);
+                        var cpath = rootpath + child.Path;
+                        var ctnf = CreateRpfTreeFolder(child, (rootpath != gamepath) ? cpath : child.Path, cpath);
                         f.AddChildToHierarchy(ctnf);
-                        RecurseMainTreeViewRPF(ctnf, allRpfs);
+                        RecurseMainTreeViewRPF(ctnf, allRpfs, rootpath);
                     }
                 }
 
@@ -1332,9 +1339,14 @@ namespace CodeWalker
             if (Searching) return;
             if (string.IsNullOrEmpty(text)) return;
 
+            var term = text.ToLowerInvariant();
+            var terms = term.Split(new[] { '*' }, StringSplitOptions.RemoveEmptyEntries);
+            if (terms.Length == 0) return;
+
             SearchTextBox.Text = text;
             SearchButton.Image = SearchGlobalButton.Image;
             SearchButton.Text = SearchGlobalButton.Text;
+            SearchButton.Checked = false;
             SearchGlobalButton.Checked = true;
             SearchFilterButton.Checked = false;
 
@@ -1354,15 +1366,13 @@ namespace CodeWalker
 
             UpdateStatus("Searching...");
 
-            var term = text.ToLowerInvariant();
-
             //Task.Run(() =>
             //{
                 Searching = true;
 
             Cursor = Cursors.WaitCursor;
 
-                var resultcount = RootFolder.Search(term, this);
+                var resultcount = RootFolder.Search(terms, this);
 
                 if (Searching)
                 {
@@ -1381,14 +1391,38 @@ namespace CodeWalker
 
         public void Filter(string text)
         {
+            SearchGlobalButton.Checked = false;
+            SearchFilterButton.Checked = !SearchFilterButton.Checked;
             SearchTextBox.Text = text;
             SearchButton.Image = SearchFilterButton.Image;
             SearchButton.Text = SearchFilterButton.Text;
-            SearchGlobalButton.Checked = false;
-            SearchFilterButton.Checked = true;
+            SearchButton.Checked = SearchFilterButton.Checked;
 
-            //TODO!
-            MessageBox.Show("Filter TODO!");
+            FilterUpdate();
+        }
+        private void FilterUpdate()
+        {
+            var term = SearchTextBox.Text;
+            var terms = term.Split(new[] { '*' }, StringSplitOptions.RemoveEmptyEntries);
+            bool filterenabled = SearchFilterButton.Checked;
+            if (filterenabled && (terms.Length > 0) && (!string.IsNullOrEmpty(term)))
+            {
+                var origfiles = CurrentFolder.GetListItems();
+                var filtered = new List<MainListItem>();
+                foreach (var file in origfiles)
+                {
+                    if (MainTreeFolder.SearchMatch(file.Name.ToLowerInvariant(), terms))
+                    {
+                        filtered.Add(file);
+                    }
+                }
+                CurrentFiles = filtered;
+            }
+            else
+            {
+                CurrentFiles = CurrentFolder.GetListItems();
+            }
+            SortMainListView(SortColumnIndex, SortDirection); //sorts CurrentItems and sets VirtualListSize
         }
 
 
@@ -1466,6 +1500,34 @@ namespace CodeWalker
                 data = ResourceBuilder.AddResourceHeader(rrfe, data);
             }
             return data;
+        }
+        private string GetFileXml(MainListItem file, out string newfn, string outputFolder, Action<string> errorAction)
+        {
+            newfn = null;
+            if (!CanExportXml(file)) return null;
+
+            var data = GetFileData(file);
+            if (data == null)
+            {
+                errorAction("Unable to extract file: " + file.Path);
+                return null;
+            }
+
+            var fentry = file?.File;
+            if (fentry == null)
+            {
+                //this should only happen when opening a file from filesystem...
+                var name = new FileInfo(file.FullPath).Name;
+                fentry = CreateFileEntry(name, file.FullPath, ref data);
+            }
+
+            var xml = MetaXml.GetXml(fentry, data, out newfn, outputFolder);
+            if (string.IsNullOrEmpty(xml))
+            {
+                errorAction("Unable to convert file to XML: " + file.Path);
+                return null;
+            }
+            return xml;
         }
 
 
@@ -2200,19 +2262,23 @@ namespace CodeWalker
 
             if (rpf == null) return false;
 
+            if (RpfFile.IsValidEncryption(rpf, recursive)) return true;//it's already valid...
+
             var msgr = recursive ? "(including all its parents and children) " : "";
             var msg1 = $"Are you sure you want to change this archive {msgr}to OPEN encryption?";
             var msg2 = "Loading by the game will require a mod loader such as OpenRPF.asi or OpenIV.asi.";
 
             var confirm = new Func<RpfFile, bool>((f) => 
             {
-                var msg = $"Archive {f.Name} is currently set to {f.Encryption} encryption.\n{msg1}\n{msg2}";
+                var msg0 = (f != null) ? $"Archive {f.Name} is currently set to {f.Encryption} encryption.\n" : "";
+                var msg = $"{msg0}{msg1}\n{msg2}";
                 return (MessageBox.Show(msg, "Change RPF encryption type", MessageBoxButtons.YesNo) == DialogResult.Yes);
             });
 
+
             if (recursive)
             {
-                if (confirm(rpf) == false)
+                if (confirm(null) == false)
                 {
                     return false;
                 }
@@ -2286,7 +2352,7 @@ namespace CodeWalker
         }
         private void ExportXml()
         {
-            bool needfolder = false;//need a folder to output ytd XML to, for the texture .dds files
+            var needfolder = false;//need a folder to output ytd XML to, for the texture .dds files
             if (MainListView.SelectedIndices.Count == 1)
             {
                 var idx = MainListView.SelectedIndices[0];
@@ -2301,40 +2367,21 @@ namespace CodeWalker
 
             if ((MainListView.SelectedIndices.Count == 1) && (!needfolder))
             {
+                var errorAction = new Action<string>((msg) => MessageBox.Show(msg));
+
                 var idx = MainListView.SelectedIndices[0];
                 if ((idx < 0) || (idx >= CurrentFiles.Count)) return;
                 var file = CurrentFiles[idx];
                 if (file.Folder == null)
                 {
-                    if (CanExportXml(file))
+                    var xml = GetFileXml(file, out var newfn, null, errorAction);
+                    
+                    if (string.IsNullOrEmpty(xml) == false)
                     {
-                        byte[] data = GetFileData(file);
-                        if (data == null)
-                        {
-                            MessageBox.Show("Unable to extract file: " + file.Path);
-                            return;
-                        }
-
-                        string newfn;
-                        var fentry = file?.File;
-                        if (fentry == null)
-                        {
-                            //this should only happen when opening a file from filesystem...
-                            var name = new FileInfo(file.FullPath).Name;
-                            fentry = CreateFileEntry(name, file.FullPath, ref data);
-                        }
-
-                        string xml = MetaXml.GetXml(fentry, data, out newfn);
-                        if (string.IsNullOrEmpty(xml))
-                        {
-                            MessageBox.Show("Unable to convert file to XML: " + file.Path);
-                            return;
-                        }
-
                         SaveFileDialog.FileName = newfn;
                         if (SaveFileDialog.ShowDialog() == DialogResult.OK)
                         {
-                            string path = SaveFileDialog.FileName;
+                            var path = SaveFileDialog.FileName;
                             try
                             {
                                 File.WriteAllText(path, xml);
@@ -2353,6 +2400,7 @@ namespace CodeWalker
                 if (string.IsNullOrEmpty(folderpath)) return;
 
                 StringBuilder errors = new StringBuilder();
+                var errorAction = new Action<string>((msg) => errors.AppendLine(msg));
 
                 for (int i = 0; i < MainListView.SelectedIndices.Count; i++)
                 {
@@ -2361,30 +2409,8 @@ namespace CodeWalker
                     var file = CurrentFiles[idx];
                     if (file.Folder == null)
                     {
-                        if (!CanExportXml(file)) continue;
-
-                        var data = GetFileData(file);
-                        if (data == null)
-                        {
-                            errors.AppendLine("Unable to extract file: " + file.Path);
-                            continue;
-                        }
-
-                        string newfn;
-                        var fentry = file?.File;
-                        if (fentry == null)
-                        {
-                            //this should only happen when opening a file from filesystem...
-                            var name = new FileInfo(file.FullPath).Name;
-                            fentry = CreateFileEntry(name, file.FullPath, ref data);
-                        }
-
-                        string xml = MetaXml.GetXml(fentry, data, out newfn, folderpath);
-                        if (string.IsNullOrEmpty(xml))
-                        {
-                            errors.AppendLine("Unable to convert file to XML: " + file.Path);
-                            continue;
-                        }
+                        var xml = GetFileXml(file, out var newfn, folderpath, errorAction);
+                        if (string.IsNullOrEmpty(xml)) continue;
 
                         var path = folderpath + newfn;
                         try
@@ -2872,9 +2898,9 @@ namespace CodeWalker
 
             OpenFileDialog.Filter = "XML Files|*.xml";
             if (OpenFileDialog.ShowDialog(this) != DialogResult.OK) return;
-            ImportXml(OpenFileDialog.FileNames, false);//already checked encryption before the file dialog...
+            ImportXml(OpenFileDialog.FileNames, false, null);//already checked encryption before the file dialog...
         }
-        private void ImportXml(string[] fpaths, bool checkEncryption = true)
+        private void ImportXml(string[] fpaths, bool checkEncryption = true, Dictionary<string, RpfDirectoryEntry> dirdict = null)
         {
             if (!EditMode) return;
             if (CurrentFolder?.IsSearchResults ?? false) return;
@@ -2908,34 +2934,58 @@ namespace CodeWalker
                         continue;
                     }
 
-                    var trimlength = 4;
-                    var mformat = XmlMeta.GetXMLFormat(fnamel, out trimlength);
-
-                    fname = fname.Substring(0, fname.Length - trimlength);
-                    fnamel = fnamel.Substring(0, fnamel.Length - trimlength);
-                    fpathin = fpathin.Substring(0, fpathin.Length - trimlength);
-                    fpathin = Path.Combine(Path.GetDirectoryName(fpathin), Path.GetFileNameWithoutExtension(fpathin));
-
-                    var doc = new XmlDocument();
-                    string text = File.ReadAllText(fpath);
-                    if (!string.IsNullOrEmpty(text))
+                    byte[] data = null;
+                    var mformat = MetaFormat.XML;
+                    if (fnamel.IndexOf('.') == fnamel.LastIndexOf('.'))
                     {
-                        doc.LoadXml(text);
+                        //the user has selected import XML option, but this file is just an ordinary XML file.
+                        //import this file directly instead of attempting XML conversion.
+
+                        data = File.ReadAllBytes(fpath);
+
+                    }
+                    else
+                    {
+                        var trimlength = 4;
+                        mformat = XmlMeta.GetXMLFormat(fnamel, out trimlength);
+
+                        fname = fname.Substring(0, fname.Length - trimlength);
+                        fnamel = fnamel.Substring(0, fnamel.Length - trimlength);
+                        fpathin = fpathin.Substring(0, fpathin.Length - trimlength);
+                        fpathin = Path.Combine(Path.GetDirectoryName(fpathin), Path.GetFileNameWithoutExtension(fpathin));
+
+                        var doc = new XmlDocument();
+                        string text = File.ReadAllText(fpath);
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            doc.LoadXml(text);
+                        }
+
+                        data = XmlMeta.GetData(doc, mformat, fpathin);
+
                     }
 
-                    byte[] data = XmlMeta.GetData(doc, mformat, fpathin);
 
                     if (data != null)
                     {
                         if (CurrentFolder.RpfFolder != null)
                         {
-                            RpfFile.CreateFile(CurrentFolder.RpfFolder, fname, data);
+                            var rpffldr = CurrentFolder.RpfFolder;
+                            if ((dirdict != null) && dirdict.ContainsKey(fpath))
+                            {
+                                rpffldr = dirdict[fpath];
+                            }
+
+                            RpfFile.CreateFile(rpffldr, fname, data);
                         }
                         else if (!string.IsNullOrEmpty(CurrentFolder.FullPath))
                         {
                             var outfpath = Path.Combine(CurrentFolder.FullPath, fname);
                             File.WriteAllBytes(outfpath, data);
                             CurrentFolder.EnsureFile(outfpath);
+
+                            //TODO: handle folders...
+
                         }
                     }
                     else
@@ -2971,9 +3021,9 @@ namespace CodeWalker
 
             var fpaths = OpenFileDialog.FileNames;
 
-            ImportRaw(fpaths, false);//already checked encryption before the file dialog...
+            ImportRaw(fpaths, false, null);//already checked encryption before the file dialog...
         }
-        private void ImportRaw(string[] fpaths, bool checkEncryption = true)
+        private void ImportRaw(string[] fpaths, bool checkEncryption = true, Dictionary<string, RpfDirectoryEntry> dirdict = null)
         {
             if (!EditMode) return;
             if (CurrentFolder?.IsSearchResults ?? false) return;
@@ -2985,70 +3035,7 @@ namespace CodeWalker
                 if (!EnsureRpfValidEncryption() && (CurrentFolder.RpfFolder != null)) return;
             }
 
-            var filelist = new List<string>();
-            var dirdict = new Dictionary<string, RpfDirectoryEntry>();
             foreach (var fpath in fpaths)
-            {
-                try
-                {
-                    if (File.Exists(fpath))
-                    {
-                        filelist.Add(fpath);
-                    }
-                    else if (Directory.Exists(fpath) && (CurrentFolder.RpfFolder != null)) //create imported directory structure in the RPF.
-                    {
-                        //create the first directory entry.
-                        var fdi = new DirectoryInfo(fpath);
-                        var direntry = RpfFile.CreateDirectory(CurrentFolder.RpfFolder, fdi.Name);
-                        dirdict[fpath] = direntry;
-                        var dirpaths = Directory.GetFileSystemEntries(fpath, "*", SearchOption.AllDirectories);
-                        var newfiles = new List<string>();
-                        foreach (var dirpath in dirpaths)
-                        {
-                            if (File.Exists(dirpath))
-                            {
-                                newfiles.Add(dirpath);
-                            }
-                            else if (Directory.Exists(dirpath))
-                            {
-                                var cdi = new DirectoryInfo(dirpath);
-                                RpfDirectoryEntry pdirentry;
-                                if (!dirdict.TryGetValue(cdi.Parent.FullName, out pdirentry))
-                                {
-                                    pdirentry = direntry;//fallback, shouldn't get here
-                                }
-                                if (pdirentry != null)
-                                {
-                                    var cdirentry = RpfFile.CreateDirectory(pdirentry, cdi.Name);
-                                    dirdict[dirpath] = cdirentry;
-                                }
-                            }
-                        }
-                        foreach (var newfile in newfiles)
-                        {
-                            var nfi = new FileInfo(newfile);
-                            RpfDirectoryEntry ndirentry;
-                            if (!dirdict.TryGetValue(nfi.DirectoryName, out ndirentry))
-                            {
-                                ndirentry = direntry;//fallback, shouldn't get here
-                            }
-                            filelist.Add(newfile);
-                            dirdict[newfile] = ndirentry;
-                        }
-
-                        EnsureImportedFolder(direntry, CurrentFolder.RpfFolder);
-                    }
-                    else
-                    { } //nothing to see here!
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Unable to import folder");
-                }
-            }
-
-
-            foreach (var fpath in filelist)
             {
                 try
                 {
@@ -3073,7 +3060,7 @@ namespace CodeWalker
                     if (CurrentFolder.RpfFolder != null)
                     {
                         var rpffldr = CurrentFolder.RpfFolder;
-                        if (dirdict.ContainsKey(fpath))
+                        if ((dirdict != null) && dirdict.ContainsKey(fpath))
                         {
                             rpffldr = dirdict[fpath];
                         }
@@ -3089,7 +3076,7 @@ namespace CodeWalker
                         File.WriteAllBytes(outfpath, data);
                         CurrentFolder.EnsureFile(outfpath);
 
-                        //TODO: folders...
+                        //TODO: handle folders...
                     }
 
                     Cursor = Cursors.Default;
@@ -3101,6 +3088,85 @@ namespace CodeWalker
             }
 
             RefreshMainListView();
+        }
+        private void ImportFolderStructure(string[] fpaths, List<string> filelist, Dictionary<string, RpfDirectoryEntry> dirdict)
+        {
+            //ensure folder structure is created for given directories in fpaths.
+            //paths that are files and not directories will be ignored.
+            //all will be imported to the CurrentFolder.
+            //filelist is an output list of all files to import.
+            //dirdict is an output dictionary of any directories that were created.
+
+            if (filelist == null) filelist = new List<string>();
+            if (dirdict == null) dirdict = new Dictionary<string, RpfDirectoryEntry>();
+
+            foreach (var fpath in fpaths)
+            {
+                try
+                {
+                    if (File.Exists(fpath))
+                    {
+                        filelist.Add(fpath);
+                    }
+                    else if (Directory.Exists(fpath))
+                    {
+                        if (CurrentFolder.RpfFolder != null)
+                        {
+                            //create imported directory structure in the RPF.
+                            var fdi = new DirectoryInfo(fpath);
+                            var direntry = RpfFile.CreateDirectory(CurrentFolder.RpfFolder, fdi.Name);//create the first directory entry.
+                            dirdict[fpath] = direntry;
+                            var dirpaths = Directory.GetFileSystemEntries(fpath, "*", SearchOption.AllDirectories);
+                            var newfiles = new List<string>();
+                            foreach (var dirpath in dirpaths)
+                            {
+                                if (File.Exists(dirpath))
+                                {
+                                    newfiles.Add(dirpath);
+                                }
+                                else if (Directory.Exists(dirpath))
+                                {
+                                    var cdi = new DirectoryInfo(dirpath);
+                                    RpfDirectoryEntry pdirentry;
+                                    if (!dirdict.TryGetValue(cdi.Parent.FullName, out pdirentry))
+                                    {
+                                        pdirentry = direntry;//fallback, shouldn't get here
+                                    }
+                                    if (pdirentry != null)
+                                    {
+                                        var cdirentry = RpfFile.CreateDirectory(pdirentry, cdi.Name);
+                                        dirdict[dirpath] = cdirentry;
+                                    }
+                                }
+                            }
+                            foreach (var newfile in newfiles)
+                            {
+                                var nfi = new FileInfo(newfile);
+                                RpfDirectoryEntry ndirentry;
+                                if (!dirdict.TryGetValue(nfi.DirectoryName, out ndirentry))
+                                {
+                                    ndirentry = direntry;//fallback, shouldn't get here
+                                }
+                                filelist.Add(newfile);
+                                dirdict[newfile] = ndirentry;
+                            }
+
+                            EnsureImportedFolder(direntry, CurrentFolder.RpfFolder);
+                        }
+                        else
+                        {
+                            //TODO: create imported directory structure in file system...
+                        }
+                    }
+                    else
+                    { } //nothing to see here!
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"{fpath}\n{ex.Message}", "Unable to import folder");
+                }
+            }
+
         }
         private void CopySelected()
         {
@@ -3718,6 +3784,45 @@ namespace CodeWalker
             e.Item = lvi;
         }
 
+        private void MainListView_SearchForVirtualItem(object sender, SearchForVirtualItemEventArgs e)
+        {
+            if (CurrentFiles == null) return;
+            var term = e.Text;
+            if (string.IsNullOrEmpty(term)) return;
+            var terml = term.ToLowerInvariant();
+            var start = e.StartIndex;
+            var isprefix = true;// e.IsPrefixSearch;
+            var direction = e.Direction;
+            var up = (direction == SearchDirectionHint.Up) || (direction == SearchDirectionHint.Left);
+            var icnt = CurrentFiles.Count;
+            var incr = up ? -1 : 1;
+            var i = start;
+            while ((i >= 0) && (i < icnt))
+            {
+                var name = CurrentFiles[i]?.Name;
+                if (string.IsNullOrEmpty(name) == false)
+                {
+                    if (isprefix)
+                    {
+                        if (name.StartsWith(terml, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            e.Index = i;
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        if (name.ToLowerInvariant().Contains(terml))//they fixed this in .net8
+                        {
+                            e.Index = i;
+                            return;
+                        }
+                    }
+                }
+                i += incr;
+            }
+        }
+
         private void MainListView_ColumnClick(object sender, ColumnClickEventArgs e)
         {
             var newdir = SortDirection;
@@ -3952,18 +4057,25 @@ namespace CodeWalker
                 if ((files == null) || (files.Length <= 0)) return;
                 if (files[0].StartsWith(GetDropFolder(), StringComparison.InvariantCultureIgnoreCase)) return; //don't dry to drop on ourselves...
 
+                if (!EnsureRpfValidEncryption() && (CurrentFolder.RpfFolder != null)) return;
+
+                var filelist = new List<string>();
+                var dirdict = new Dictionary<string, RpfDirectoryEntry>();
+                ImportFolderStructure(files, filelist, dirdict);
+                files = filelist.ToArray();//this will have any directories removed
+
                 //Import as raw regardless of file type while pressing shift
                 if ((e.KeyState & 4) == 4)
                 {
-                    ImportRaw(files);
+                    ImportRaw(files, false, dirdict);
                     return;
                 }
 
                 var xml = files.Where(x => x.EndsWith(".xml") && (x.IndexOf('.') != x.LastIndexOf('.')));
                 var raw = files.Except(xml);
 
-                if (raw.Count() > 0) ImportRaw(raw.ToArray());
-                if (xml.Count() > 0) ImportXml(xml.ToArray());
+                if (raw.Count() > 0) ImportRaw(raw.ToArray(), false, dirdict);
+                if (xml.Count() > 0) ImportXml(xml.ToArray(), false, dirdict);
             }
         }
 
@@ -4043,6 +4155,14 @@ namespace CodeWalker
             {
                 SearchButton_ButtonClick(sender, e);
                 e.Handled = true;
+            }
+        }
+
+        private void SearchTextBox_TextChanged(object sender, EventArgs e)
+        {
+            if (SearchFilterButton.Checked)
+            {
+                FilterUpdate();
             }
         }
 
@@ -4553,14 +4673,14 @@ namespace CodeWalker
             return Path;
         }
 
-        public int Search(string term, ExploreForm form)
+        public int Search(string[] terms, ExploreForm form)
         {
             int resultcount = 0;
             //if (!form.Searching) return resultcount;
 
             form.UpdateStatus("Searching " + Path + "...");
 
-            if (Name.ToLowerInvariant().Contains(term))
+            if (SearchMatch(Name.ToLowerInvariant(), terms))
             {
                 form.AddSearchResult(new MainListItem(this));
                 resultcount++;
@@ -4574,7 +4694,7 @@ namespace CodeWalker
                 {
                     //if (!form.Searching) return resultcount;
                     var fi = new FileInfo(file);
-                    if (fi.Name.ToLowerInvariant().Contains(term))
+                    if (SearchMatch(fi.Name.ToLowerInvariant(), terms))
                     {
                         form.AddSearchResult(new MainListItem(file, rootpath, this));
                         resultcount++;
@@ -4587,7 +4707,7 @@ namespace CodeWalker
                 {
                     //if (!form.Searching) return resultcount;
                     if (file.NameLower.EndsWith(".rpf")) continue; //don't search rpf files..
-                    if (file.NameLower.Contains(term))
+                    if (SearchMatch(file.NameLower, terms))
                     {
                         form.AddSearchResult(new MainListItem(file, rootpath, this));
                         resultcount++;
@@ -4600,13 +4720,26 @@ namespace CodeWalker
                 foreach (var child in Children)
                 {
                     //if (!form.Searching) return resultcount;
-                    resultcount += child.Search(term, form);
+                    resultcount += child.Search(terms, form);
                 }
             }
 
             form.AddSearchResult(null);
 
             return resultcount;
+        }
+        public static bool SearchMatch(string test, string[] terms)
+        {
+            int startidx = 0;
+            for (int i = 0; i < terms.Length; i++)
+            {
+                if (startidx >= test.Length) return false;
+                var term = terms[i];
+                var idx = test.IndexOf(term, startidx);
+                if (idx < 0) return false;
+                startidx = idx + term.Length;
+            }
+            return true;
         }
 
         public void Clear()

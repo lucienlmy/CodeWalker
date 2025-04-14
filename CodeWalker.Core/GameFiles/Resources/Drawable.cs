@@ -405,6 +405,9 @@ namespace CodeWalker.GameFiles
             GameFileCache.EnsureShadersGen9ConversionData();
             GameFileCache.ShadersGen9ConversionData.TryGetValue(Name, out var dc);
 
+            if (dc == null)
+            { }
+
             var bsizs = dc?.BufferSizes;
             var pinfs = dc?.ParamInfos;
             var tc = 0;
@@ -4244,78 +4247,12 @@ namespace CodeWalker.GameFiles
             //create VertexDeclaration (Info) from G9_Info
             //and remap vertex data into Data1.VertexBytes (and Data2)
 
-            var vdtypes = VertexDeclarationTypes.GTAV1;
-            var vdflags = 0u;
             var g9types = G9_Info.Types;
             var g9sizes = G9_Info.Sizes;//these seem to just contain the vertex stride - not sizes but offsets to next item
             var g9offs = G9_Info.Offsets;
-            var g9cnt = G9_Info.ElementCount;
-            for (int i = 0; i < g9types.Length; i++)//52
-            {
-                var t = g9types[i];
-                if (t == 0) continue;
-                var lci = VertexDeclarationG9.GetLegacyComponentIndexGTAV1(i);
-                if (lci < 0)
-                {
-                    //this component type won't work for GTAV1 type...
-                    //TODO: try a different type! eg GTAV4
-                    continue;
-                }
-                vdflags = BitUtil.SetBit(vdflags, lci);
-            }
-            var vtype = (VertexType)vdflags;
-            switch (vtype)//just testing converted flags
-            {
-                case VertexType.Default:
-                case VertexType.DefaultEx:
-                case VertexType.PCTT:
-                case VertexType.PNCCT:
-                case VertexType.PNCCTTTX:
-                case VertexType.PNCTTX:
-                case VertexType.PNCCTT:
-                case VertexType.PNCTTTX:
-                case VertexType.PNCCTTX_2:
-                case VertexType.PNCCTX:
-                case VertexType.PNCCTTX:
-                case VertexType.PBBNCTX:
-                case VertexType.PBBNCT:
-                case VertexType.PBBNCCTX:
-                case VertexType.PBBCCT:
-                case VertexType.PBBNCTTX:
-                case VertexType.PNC:
-                case VertexType.PCT:
-                case VertexType.PNCTTTX_2:
-                case VertexType.PNCTTTTX:
-                case VertexType.PBBNCCT:
-                case VertexType.PT:
-                case VertexType.PNCCTTTT:
-                case VertexType.PNCTTTX_3:
-                case VertexType.PCC:
-                case (VertexType)113://PCCT: decal_diff_only_um, ch_chint02_floor_mural_01.ydr
-                case (VertexType)1://P: farlods.ydd
-                case VertexType.PTT:
-                case VertexType.PC:
-                case VertexType.PBBNCCTTX:
-                case VertexType.PBBNCCTT:
-                case VertexType.PBBNCTT:
-                case VertexType.PBBNCTTT:
-                case VertexType.PNCTT:
-                case VertexType.PNCTTT:
-                case VertexType.PBBNCTTTX:
-                    break;
-                default:
-                    break;
-            }
-
-            var vd = new VertexDeclaration();
-            vd.Types = vdtypes;
-            vd.Flags = vdflags;
-            vd.UpdateCountAndStride();
-            if (vd.Count != g9cnt)
-            { }//just testing converted component count actually matches
-            if (vd.Stride != VertexStride)
-            { }//just testing converted stride actually matches
-
+            var vd = G9_Info.GetLegacyDeclaration();
+            var vdtypes = vd.Types;
+            var vtype = (VertexType)vd.Flags;
 
             //this really sucks that we have to rebuild the vertex data, but component ordering is different!
             //maybe some layouts still have the same ordering so this could be bypassed, but probably not many.
@@ -4324,7 +4261,7 @@ namespace CodeWalker.GameFiles
             {
                 var t = g9types[i];
                 if (t == 0) continue;
-                var lci = VertexDeclarationG9.GetLegacyComponentIndexGTAV1(i);//TODO: handle other vdtypes
+                var lci = VertexDeclarationG9.GetLegacyComponentIndex(i, vdtypes);
                 if (lci < 0) continue;
                 var cssize = (int)g9sizes[i];
                 var csoff = (int)g9offs[i];
@@ -4360,39 +4297,11 @@ namespace CodeWalker.GameFiles
             //and remap vertex data from Data1.VertexBytes into the result
 
             var vd = Info;
-            var vstride = (byte)VertexStride;
-            var vdtypes = vd.Types;// VertexDeclarationTypes.GTAV1;
-            var vdflags = vd.Flags;
-            var g9offs = new uint[52];
-            var g9sizes = new byte[52];//these seem to just contain the vertex stride - not sizes but offsets to next item
-            var g9types = new byte[52];
-
-            if (vdtypes != VertexDeclarationTypes.GTAV1)
-            {
-                //throw new Exception($"Unsupported VertexDeclarationTypes ({vdtypes}) - Only GTAV1  is supported - TODO!");
-                //probably not good if we get here...
-                //TODO: try and convert from other types
-            }
-
-            var offset = 0u;
-            for (int i = 0; i < 52; i++)
-            {
-                g9offs[i] = offset;
-                var lci = VertexDeclarationG9.GetLegacyComponentIndexGTAV1(i);
-                if (lci < 0) continue;//can't be used, unavailable for GTAV1
-                if ((vdflags & (1u << lci)) == 0) continue;
-                var ctype = (VertexComponentType)(((ulong)vdtypes >> (lci * 4)) & 0xF);
-                var csize = VertexComponentTypes.GetSizeInBytes(ctype);
-                offset += (uint)csize;
-                g9sizes[i] = vstride;
-                g9types[i] = (byte)VertexDeclarationG9.GetGen9ComponentTypeGTAV1(lci);
-            }
-            var info = new VertexDeclarationG9();
-            info.Offsets = g9offs;
-            info.Sizes = g9sizes;
-            info.Types = g9types;
-            info.VertexSize = vstride;
-            info.VertexCount = 0;//it's actually supposed to be 0
+            var vdtypes = vd.Types;
+            var info = VertexDeclarationG9.FromLegacyDeclaration(vd);
+            var g9offs = info.Offsets;
+            var g9sizes = info.Sizes;//these seem to just contain the vertex stride - not sizes but offsets to next item
+            var g9types = info.Types;
 
             if (G9_Info != null)//sanity check with existing layout
             {
@@ -4420,7 +4329,7 @@ namespace CodeWalker.GameFiles
             {
                 var t = g9types[i];
                 if (t == 0) continue;
-                var lci = VertexDeclarationG9.GetLegacyComponentIndexGTAV1(i);//TODO: handle other vdtypes
+                var lci = VertexDeclarationG9.GetLegacyComponentIndex(i, vdtypes);
                 if (lci < 0) continue;
                 var cssize = (int)g9sizes[i];
                 var csoff = (int)g9offs[i];
@@ -5259,6 +5168,121 @@ namespace CodeWalker.GameFiles
         }
 
 
+
+        public VertexDeclaration GetLegacyDeclaration(VertexDeclarationTypes vdtypes = VertexDeclarationTypes.GTAV1)
+        {
+            var vdflags = 0u;
+            var g9types = Types;
+            var g9sizes = Sizes;//these seem to just contain the vertex stride - not sizes but offsets to next item
+            var g9offs = Offsets;
+            var g9cnt = ElementCount;
+            for (int i = 0; i < g9types.Length; i++)//52
+            {
+                var t = g9types[i];
+                if (t == 0) continue;
+                var lci = GetLegacyComponentIndex(i, vdtypes);
+                if (lci < 0)
+                {
+                    //this component type won't work for the given type...
+                    //TODO: try a different type! eg GTAV4
+                    continue;
+                }
+                vdflags = BitUtil.SetBit(vdflags, lci);
+            }
+            var vtype = (VertexType)vdflags;
+            switch (vtype)//just testing converted flags
+            {
+                case VertexType.Default:
+                case VertexType.DefaultEx:
+                case VertexType.PCTT:
+                case VertexType.PNCCT:
+                case VertexType.PNCCTTTX:
+                case VertexType.PNCTTX:
+                case VertexType.PNCCTT:
+                case VertexType.PNCTTTX:
+                case VertexType.PNCCTTX_2:
+                case VertexType.PNCCTX:
+                case VertexType.PNCCTTX:
+                case VertexType.PBBNCTX:
+                case VertexType.PBBNCT:
+                case VertexType.PBBNCCTX:
+                case VertexType.PBBCCT:
+                case VertexType.PBBNCTTX:
+                case VertexType.PNC:
+                case VertexType.PCT:
+                case VertexType.PNCTTTX_2:
+                case VertexType.PNCTTTTX:
+                case VertexType.PBBNCCT:
+                case VertexType.PT:
+                case VertexType.PNCCTTTT:
+                case VertexType.PNCTTTX_3:
+                case VertexType.PCC:
+                case (VertexType)113://PCCT: decal_diff_only_um, ch_chint02_floor_mural_01.ydr
+                case (VertexType)1://P: farlods.ydd
+                case VertexType.PTT:
+                case VertexType.PC:
+                case VertexType.PBBNCCTTX:
+                case VertexType.PBBNCCTT:
+                case VertexType.PBBNCTT:
+                case VertexType.PBBNCTTT:
+                case VertexType.PNCTT:
+                case VertexType.PNCTTT:
+                case VertexType.PBBNCTTTX:
+                    break;
+                default:
+                    break;
+            }
+
+            var vd = new VertexDeclaration();
+            vd.Types = vdtypes;
+            vd.Flags = vdflags;
+            vd.UpdateCountAndStride();
+            if (vd.Count != g9cnt)
+            { }//just testing converted component count actually matches
+            if (vd.Stride != VertexSize)
+            { }//just testing converted stride actually matches
+
+            return vd;
+        }
+        public static VertexDeclarationG9 FromLegacyDeclaration(VertexDeclaration vd)
+        {
+            var vstride = (byte)vd.Stride;
+            var vdtypes = vd.Types;// VertexDeclarationTypes.GTAV1;
+            var vdflags = vd.Flags;
+            var g9offs = new uint[52];
+            var g9sizes = new byte[52];//these seem to just contain the vertex stride - not sizes but offsets to next item
+            var g9types = new byte[52];
+
+            if (vdtypes != VertexDeclarationTypes.GTAV1)
+            {
+                //there might be some issues with converting other types
+                //for example, if a component doesn't have a (known) equivalent gen9 type
+            }
+
+            var offset = 0u;
+            for (int i = 0; i < 52; i++)
+            {
+                g9offs[i] = offset;
+                var lci = GetLegacyComponentIndex(i, vdtypes);
+                if (lci < 0) continue;//can't be used, unavailable for GTAV1
+                if ((vdflags & (1u << lci)) == 0) continue;
+                var ctype = (VertexComponentType)(((ulong)vdtypes >> (lci * 4)) & 0xF);
+                var csize = VertexComponentTypes.GetSizeInBytes(ctype);
+                offset += (uint)csize;
+                g9sizes[i] = vstride;
+                g9types[i] = (byte)GetGen9ComponentType(lci, vdtypes);
+            }
+            var info = new VertexDeclarationG9();
+            info.Offsets = g9offs;
+            info.Sizes = g9sizes;
+            info.Types = g9types;
+            info.VertexSize = vstride;
+            info.VertexCount = 0;//it's actually supposed to be 0
+
+            return info;
+        }
+
+
         public static VertexComponentType GetLegacyComponentType(VertexDeclarationG9ElementFormat f)
         {
             switch (f)
@@ -5271,8 +5295,10 @@ namespace CodeWalker.GameFiles
                 default: return VertexComponentType.Float4;
             }
         }
-        public static int GetLegacyComponentIndexGTAV1(int i)
+        public static int GetLegacyComponentIndex(int i, VertexDeclarationTypes vdtypes)
         {
+            if (vdtypes != VertexDeclarationTypes.GTAV1)
+            { }//TODO: is this ok? are component indices (semantics?) always the same?
             //GTAV1 = 0x7755555555996996, // GTAV - used by most drawables
             switch (i)
             {
@@ -5373,6 +5399,32 @@ namespace CodeWalker.GameFiles
                 case 15: return VertexDeclarationG9ElementFormat.R32G32B32A32_FLOAT;
                 default: return VertexDeclarationG9ElementFormat.R32G32B32A32_FLOAT;
             }
+        }
+        public static VertexDeclarationG9ElementFormat GetGen9ComponentType(int lci, VertexDeclarationTypes vdtypes)
+        {
+            if (vdtypes == VertexDeclarationTypes.GTAV1) return GetGen9ComponentTypeGTAV1(lci);
+
+            switch (lci)
+            {
+                case 1: return VertexDeclarationG9ElementFormat.R8G8B8A8_UNORM;//boneweights
+                case 2: return VertexDeclarationG9ElementFormat.R8G8B8A8_UINT;//boneinds
+            }
+            var t = (VertexComponentType)((((ulong)vdtypes) >> (lci * 4)) & 0xF);
+            switch (t)
+            {
+                case VertexComponentType.Half2: return VertexDeclarationG9ElementFormat.R16G16_FLOAT;
+                case VertexComponentType.Float: return VertexDeclarationG9ElementFormat.NONE;
+                case VertexComponentType.Half4: return VertexDeclarationG9ElementFormat.R16G16B16A16_FLOAT;
+                case VertexComponentType.FloatUnk: return VertexDeclarationG9ElementFormat.NONE;
+                case VertexComponentType.Float2: return VertexDeclarationG9ElementFormat.R32G32_TYPELESS;
+                case VertexComponentType.Float3: return VertexDeclarationG9ElementFormat.R32G32B32_FLOAT;
+                case VertexComponentType.Float4: return VertexDeclarationG9ElementFormat.R32G32B32A32_FLOAT;
+                case VertexComponentType.UByte4: return VertexDeclarationG9ElementFormat.R8G8B8A8_UINT;
+                case VertexComponentType.Colour: return VertexDeclarationG9ElementFormat.R8G8B8A8_UNORM;
+                case VertexComponentType.RGBA8SNorm: return VertexDeclarationG9ElementFormat.R8G8B8A8_UNORM;//close?!
+                default: return VertexDeclarationG9ElementFormat.NONE;
+            }
+
         }
 
 
