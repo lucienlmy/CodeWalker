@@ -21,6 +21,7 @@ namespace CodeWalker
 {
     public partial class WorldForm : Form, DXForm
     {
+        private bool toolbarLastVisible = false;
         public Form Form { get { return this; } } //for DXForm/DXManager use
 
         public Renderer Renderer = null;
@@ -107,7 +108,7 @@ namespace CodeWalker
 
 
 
-        
+
 
 
 
@@ -229,8 +230,29 @@ namespace CodeWalker
             initedOk = Renderer.Init();
 
             GTAFolder.UpdateEnhancedFormTitle(this);
+
+            // 加载并应用工具栏可见状态
+            ToolbarPanel.Visible = Settings.Default.ShowToolbarOnStartup;
+            ShowToolbarCheckBox.Checked = ToolbarPanel.Visible;
+            UpdateToolbarVisibility();
+        }
+        // 添加保存设置的方法
+        private void SaveToolbarState()
+        {
+            Settings.Default.ShowToolbarOnStartup = ShowToolbarCheckBox.Checked;
+            Settings.Default.Save();
         }
 
+        // 在窗体关闭时保存设置
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            SaveToolbarState();
+            base.OnFormClosing(e);
+        }
+        private void UpdateToolbarVisibility()
+        {
+            ToolbarPanel.Visible = ShowToolbarCheckBox.Checked;
+        }
 
         private void Init()
         {
@@ -357,7 +379,7 @@ namespace CodeWalker
             }
 
             camera.FollowEntity = camEntity;
-            camEntity.Position = (startupviewmode!=2) ? prevworldpos : Vector3.Zero;
+            camEntity.Position = (startupviewmode != 2) ? prevworldpos : Vector3.Zero;
             camEntity.Orientation = Quaternion.LookAtLH(Vector3.Zero, Vector3.Up, Vector3.ForwardLH);
 
             space.AddPersistentEntity(pedEntity);
@@ -832,7 +854,7 @@ namespace CodeWalker
 
             ProjectForm?.GetVisibleWaterQuads<T>(camera, renderwaterquadlist);
 
-            if(SelectionMode == requiredMode) UpdateMouseHits(renderwaterquadlist);
+            if (SelectionMode == requiredMode) UpdateMouseHits(renderwaterquadlist);
 
             return renderwaterquadlist;
         }
@@ -1203,7 +1225,7 @@ namespace CodeWalker
                 UpdateMousedLabel(text);
             }
 
-            if(!CurMouseHit.HasHit)
+            if (!CurMouseHit.HasHit)
             { return; }
 
 
@@ -1472,7 +1494,7 @@ namespace CodeWalker
                     Vector3 dup = Vector3.UnitZ;
                     var aori = Quaternion.Invert(Quaternion.RotationLookAtRH(dir, dup));
                     float arrowrad = 0.25f;
-                    float arrowlen = Math.Max(dl - arrowrad*5.0f, 0);
+                    float arrowlen = Math.Max(dl - arrowrad * 5.0f, 0);
                     Renderer.RenderSelectionArrowOutline(sn1.Position, -Vector3.UnitZ, Vector3.UnitY, aori, arrowlen, arrowrad, cblu);
                 }
             }
@@ -1543,7 +1565,7 @@ namespace CodeWalker
                 camrel += ori.Multiply(selectionItem.BBOffset);
                 ori = ori * selectionItem.BBOrientation;
                 bbmin = selectionItem.MloRoomDef._Data.bbMin;
-                bbmax = selectionItem.MloRoomDef._Data.bbMax;   
+                bbmax = selectionItem.MloRoomDef._Data.bbMax;
             }
             if ((selectionItem.ArchetypeExtension != null) || (selectionItem.EntityExtension != null) || (selectionItem.CollisionBounds != null))
             {
@@ -2337,7 +2359,7 @@ namespace CodeWalker
             //reset variables for beginning the mouse hit test
             CurMouseHit.Clear();
 
-         
+
             if (Input.CtrlPressed && ProjectForm != null && ProjectForm.CanPaintInstances())   // Get whether or not we can brush from the project form.
             {
                 ControlBrushEnabled = true;
@@ -2368,7 +2390,7 @@ namespace CodeWalker
 
 
         }
-        
+
         public SpaceRayIntersectResult GetSpaceMouseRay()
         {
             SpaceRayIntersectResult ret = new SpaceRayIntersectResult();
@@ -2428,7 +2450,7 @@ namespace CodeWalker
             //if ((SelectionMode == MapSelectionMode.Entity) && !MouseSelectEnabled) return; //performance improvement when not selecting entities...
 
             //test the selected entity/archetype for mouse hit.
-            
+
             //first test the bounding sphere for mouse hit..
             Quaternion orinv;
             Ray mraytrn;
@@ -2471,7 +2493,7 @@ namespace CodeWalker
                 //transform the mouse ray into the entity space.
                 orinv = Quaternion.Invert(orientation);
                 mraytrn = new Ray();
-                mraytrn.Position = orinv.Multiply(camera.MouseRay.Position-camrel);
+                mraytrn.Position = orinv.Multiply(camera.MouseRay.Position - camrel);
                 mraytrn.Direction = orinv.Multiply(camera.MouseRay.Direction);
 
                 if (SelectionMode == MapSelectionMode.EntityExtension)
@@ -2562,7 +2584,7 @@ namespace CodeWalker
             //transform the mouse ray into the entity space.
             orinv = Quaternion.Invert(orientation);
             mraytrn = new Ray();
-            mraytrn.Position = orinv.Multiply(camera.MouseRay.Position-camrel);
+            mraytrn.Position = orinv.Multiply(camera.MouseRay.Position - camrel);
             mraytrn.Direction = orinv.Multiply(camera.MouseRay.Direction);
             hitdist = 0.0f;
 
@@ -2599,7 +2621,7 @@ namespace CodeWalker
                                     float r2 = b2.Length() * 0.5f;
                                     radsm = (r1 < (r2));// * 0.5f));
                                 }
-                                if ((nearer&&radsm) || radsm) usehit = true;
+                                if ((nearer && radsm) || radsm) usehit = true;
                             }
                         }
                         else if (j == 0) //no hit on model box
@@ -2641,7 +2663,7 @@ namespace CodeWalker
                             float r2 = CurMouseHit.Archetype.BSRadius;
                             radsm = (r1 <= (r2));// * 0.5f)); //prefer selecting smaller things
                         }
-                        if ((nearer&&radsm) || radsm)
+                        if ((nearer && radsm) || radsm)
                         {
                             outerhit = true;
                         }
@@ -2966,7 +2988,7 @@ namespace CodeWalker
                 bbox.Minimum = mb.BBMin;
                 bbox.Maximum = mb.BBMax;
 
-                if(mray.Intersects(ref bbox, out hitdist) && hitdist > 0 && hitdist <= CurMouseHit.HitDist)
+                if (mray.Intersects(ref bbox, out hitdist) && hitdist > 0 && hitdist <= CurMouseHit.HitDist)
                 {
                     float curSize = CurMouseHit.AABB.Size.X * CurMouseHit.AABB.Size.Y;
                     float newSize = bbox.Size.X * bbox.Size.Y;
@@ -3479,7 +3501,7 @@ namespace CodeWalker
             bool change = false;
             if (mhit != null)
             {
-                change = SelectedItem.CheckForChanges(mhitv); 
+                change = SelectedItem.CheckForChanges(mhitv);
             }
             else
             {
@@ -4010,7 +4032,7 @@ namespace CodeWalker
                         }
                         tgnode.Expand();
                     }
-                    
+
                 }
 
                 mnode.Expand();
@@ -4328,7 +4350,8 @@ namespace CodeWalker
                         LoadWorld();
                     }
                 }
-                Invoke(new Action(()=> {
+                Invoke(new Action(() =>
+                {
                     Cursor = Cursors.Default;
                 }));
             });
@@ -4349,7 +4372,8 @@ namespace CodeWalker
                         LoadWorld();
                     }
                 }
-                Invoke(new Action(() => {
+                Invoke(new Action(() =>
+                {
                     Cursor = Cursors.Default;
                 }));
             });
@@ -4410,7 +4434,8 @@ namespace CodeWalker
             EnableDLCModsUI();
 
 
-            Task.Run(() => {
+            Task.Run(() =>
+            {
                 while (formopen && !IsDisposed) //renderer content loop
                 {
 #if !DEBUG
@@ -4835,15 +4860,18 @@ namespace CodeWalker
             ArtificialAmbientLightCheckBox.Checked = s.ArtificialAmbientLight;
             SavePositionCheckBox.Checked = s.SavePosition;
             SaveTimeOfDayCheckBox.Checked = s.SaveTimeOfDay;
-            
+
             SetTimeOfDay(s.TimeOfDay);
             Renderer.SetWeatherType(s.Weather);
-            
+
 
             EnableModsCheckBox.Checked = s.EnableMods;
             DlcLevelComboBox.Text = s.DLC;
             gameFileCache.SelectedDlc = s.DLC;
             EnableDlcCheckBox.Checked = !string.IsNullOrEmpty(s.DLC);
+
+            ShowToolbarCheckBox.Checked = Settings.Default.ShowToolbarOnStartup;
+            UpdateToolbarVisibility();
         }
         private void SaveSettings()
         {
@@ -4898,6 +4926,9 @@ namespace CodeWalker
             s.DLC = gameFileCache.EnableDlc ? gameFileCache.SelectedDlc : "";
 
             s.Save();
+
+            Settings.Default.ShowToolbarOnStartup = ShowToolbarCheckBox.Checked;
+            Settings.Default.Save();
         }
         private void ResetSettings()
         {
@@ -6130,6 +6161,8 @@ namespace CodeWalker
 
         private void WorldForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+            Settings.Default.ShowToolbarOnStartup = ToolbarPanel.Visible;
+            Settings.Default.Save();
         }
 
         private void WorldForm_FormClosed(object sender, FormClosedEventArgs e)
@@ -6190,7 +6223,8 @@ namespace CodeWalker
                                     MessageBox.Show("You cannot clone multiple path nodes at once", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                     GrabbedWidget.IsDragging = false;
                                     GrabbedWidget = null;
-                                } else
+                                }
+                                else
                                 {
                                     CloneItem();
                                 }
@@ -7338,7 +7372,7 @@ namespace CodeWalker
                 MessageBox.Show("Please close the Project Window before enabling or disabling mods.");
                 return;
             }
-            
+
             SetModsEnabled(EnableModsCheckBox.Checked);
         }
 
@@ -7514,6 +7548,9 @@ namespace CodeWalker
         private void ShowToolbarCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             ToolbarPanel.Visible = ShowToolbarCheckBox.Checked;
+            UpdateToolbarVisibility();
+            Settings.Default.ShowToolbarOnStartup = ShowToolbarCheckBox.Checked;
+            Settings.Default.Save();
         }
 
         private void ToolbarNewButton_ButtonClick(object sender, EventArgs e)
