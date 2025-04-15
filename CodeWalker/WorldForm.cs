@@ -5253,13 +5253,24 @@ namespace CodeWalker
         {
             ShowProjectForm();
 
-            if (ProjectForm.IsProjectLoaded)
+            // 根据修饰键判断打开行为
+            if (ModifierKeys.HasFlag(Keys.Shift))
             {
+                // Shift + 点击: 直接打开文件选择窗口
                 ProjectForm.OpenFiles();
+            }
+            else if (ModifierKeys.HasFlag(Keys.Control))
+            {
+                // Ctrl + 点击: 直接打开文件夹选择窗口
+                ProjectForm.OpenFolder();
             }
             else
             {
-                ProjectForm.OpenProject();
+                // 普通点击: 打开项目选择窗口
+                if (ProjectForm.IsProjectLoaded)
+                    ProjectForm.OpenFiles();
+                else
+                    ProjectForm.OpenProject();
             }
         }
         private void OpenProject()

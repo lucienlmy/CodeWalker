@@ -887,7 +887,7 @@ namespace CodeWalker.Project
             if (CurrentAudioAmbientRule?.AmbientRule == null) CurrentAudioAmbientRule = null;
             if (CurrentAudioStaticEmitter?.StaticEmitter == null) CurrentAudioStaticEmitter = null;
 
-            
+
             var daz = item as Dat151AmbientZone;//need to get these from WorldForm, project tree only contains the Dat151Rel items
             var dae = item as Dat151AmbientRule;
             var dse = item as Dat151StaticEmitter;
@@ -1139,7 +1139,7 @@ namespace CodeWalker.Project
             if (mode == DeleteGrassPanel.DeleteGrassMode.None || mode == DeleteGrassPanel.DeleteGrassMode.Batch)
                 return CurrentGrassBatch?.BrushRadius ?? 0f;
             else if (DeleteGrassPanel != null && mode != DeleteGrassPanel.DeleteGrassMode.None)
-                return DeleteGrassPanel.BrushRadius;            
+                return DeleteGrassPanel.BrushRadius;
             return 0f;
         }
 
@@ -3230,7 +3230,7 @@ namespace CodeWalker.Project
                     cent.scaleZ = 1.0f;
                     cent.flags = placement.Dynamic ? 0 : 32u;// 1572872; //32 = static
                     cent.parentIndex = -1;
-                    cent.lodDist = (placement.LodDistance < 10000 ) ? placement.LodDistance : 10000;
+                    cent.lodDist = (placement.LodDistance < 10000) ? placement.LodDistance : 10000;
                     cent.lodLevel = rage__eLodType.LODTYPES_DEPTH_ORPHANHD;
                     cent.priorityLevel = rage__ePriorityLevel.PRI_REQUIRED;
                     cent.ambientOcclusionMultiplier = 255;
@@ -9665,7 +9665,7 @@ namespace CodeWalker.Project
         {
             RemoveYbnFromProject();
         }
-        
+
         private void YdrRemoveFromProjectMenu_Click(object sender, EventArgs e)
         {
             RemoveYdrFromProject();
@@ -9838,7 +9838,7 @@ namespace CodeWalker.Project
             OptionsDisplayEntityIndexesMenu.Checked = !OptionsDisplayEntityIndexesMenu.Checked;
             displayentityindexes = OptionsDisplayEntityIndexesMenu.Checked;
             ProjectExplorer?.LoadProjectTree(CurrentProjectFile);
-            
+
             //make sure the current item is selected in the project explorer, let's just assume it's an entity
             //(for things other than entities, they will need to be re-selected manually by the user to sync project explorer again)
             if (CurrentEntity != null)
@@ -9901,13 +9901,28 @@ namespace CodeWalker.Project
         }
         private void ToolbarOpenButton_ButtonClick(object sender, EventArgs e)
         {
-            if (CurrentProjectFile == null)
+            // 根据修饰键判断打开行为
+            if (ModifierKeys.HasFlag(Keys.Shift))
             {
-                OpenProject();
+                // Shift + 点击: 直接打开文件选择窗口
+                OpenFiles();
+            }
+            else if (ModifierKeys.HasFlag(Keys.Control))
+            {
+                // Ctrl + 点击: 直接打开文件夹选择窗口 
+                OpenFolder();
             }
             else
             {
-                OpenFiles();
+                // 普通点击: 根据当前状态打开项目或文件
+                if (CurrentProjectFile == null)
+                {
+                    OpenProject();
+                }
+                else
+                {
+                    OpenFiles();
+                }
             }
         }
         private void ToolbarOpenProjectMenu_Click(object sender, EventArgs e)
