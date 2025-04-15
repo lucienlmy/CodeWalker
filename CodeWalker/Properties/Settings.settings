@@ -260,5 +260,8 @@
     <Setting Name="ShowToolbarOnStartup" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">false</Value>
     </Setting>
+    <Setting Name="ToolsPanelWidth" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">218</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

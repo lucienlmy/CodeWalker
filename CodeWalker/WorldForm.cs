@@ -235,6 +235,8 @@ namespace CodeWalker
             ToolbarPanel.Visible = Settings.Default.ShowToolbarOnStartup;
             ShowToolbarCheckBox.Checked = ToolbarPanel.Visible;
             UpdateToolbarVisibility();
+
+            ApplyToolsPanelWidth(); // 确保启动时位置正确
         }
         // 添加保存设置的方法
         private void SaveToolbarState()
@@ -247,11 +249,19 @@ namespace CodeWalker
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             SaveToolbarState();
+            SaveToolsPanelWidth(); // 保存 ToolsPanel 宽度
             base.OnFormClosing(e);
         }
         private void UpdateToolbarVisibility()
         {
             ToolbarPanel.Visible = ShowToolbarCheckBox.Checked;
+        }
+
+        // 在 ToolsPanel 宽度变化时保存
+        private void SaveToolsPanelWidth()
+        {
+            Settings.Default.ToolsPanelWidth = ToolsPanel.Width;
+            Settings.Default.Save();
         }
 
         private void Init()
@@ -4198,9 +4208,9 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading timecycles...");
-                timecycle.Init(gameFileCache, UpdateStatus);
-                timecycle.SetTime(Renderer.timeofday);
+            UpdateStatus("Loading timecycles...");
+            timecycle.Init(gameFileCache, UpdateStatus);
+            timecycle.SetTime(Renderer.timeofday);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4210,8 +4220,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading materials...");
-                BoundsMaterialTypes.Init(gameFileCache);
+            UpdateStatus("Loading materials...");
+            BoundsMaterialTypes.Init(gameFileCache);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4221,9 +4231,9 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading weather...");
-                weather.Init(gameFileCache, UpdateStatus, timecycle);
-                UpdateWeatherTypesComboBox(weather);
+            UpdateStatus("Loading weather...");
+            weather.Init(gameFileCache, UpdateStatus, timecycle);
+            UpdateWeatherTypesComboBox(weather);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4233,9 +4243,9 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading clouds...");
-                clouds.Init(gameFileCache, UpdateStatus, weather);
-                UpdateCloudTypesComboBox(clouds);
+            UpdateStatus("Loading clouds...");
+            clouds.Init(gameFileCache, UpdateStatus, weather);
+            UpdateCloudTypesComboBox(clouds);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4245,8 +4255,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading water...");
-                water.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading water...");
+            water.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4256,8 +4266,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading trains...");
-                trains.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading trains...");
+            trains.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4267,8 +4277,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading scenarios...");
-                scenarios.Init(gameFileCache, UpdateStatus, timecycle);
+            UpdateStatus("Loading scenarios...");
+            scenarios.Init(gameFileCache, UpdateStatus, timecycle);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4278,8 +4288,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading popzones...");
-                popzones.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading popzones...");
+            popzones.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4289,8 +4299,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading heightmaps...");
-                heightmaps.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading heightmaps...");
+            heightmaps.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4300,8 +4310,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading watermaps...");
-                watermaps.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading watermaps...");
+            watermaps.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4311,8 +4321,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading audio zones...");
-                audiozones.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading audio zones...");
+            audiozones.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4322,8 +4332,8 @@ namespace CodeWalker
             try
             {
 #endif
-                UpdateStatus("Loading world...");
-                space.Init(gameFileCache, UpdateStatus);
+            UpdateStatus("Loading world...");
+            space.Init(gameFileCache, UpdateStatus);
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4416,7 +4426,7 @@ namespace CodeWalker
             try
             {
 #endif
-                LoadWorld();
+            LoadWorld();
 #if !DEBUG
             }
             catch (Exception ex)
@@ -4442,11 +4452,11 @@ namespace CodeWalker
                     try
                     {
 #endif
-                        bool rcItemsPending = Renderer.ContentThreadProc();
-                        if (!rcItemsPending)
-                        {
-                            Thread.Sleep(1); //sleep if there's nothing to do
-                        }
+                    bool rcItemsPending = Renderer.ContentThreadProc();
+                    if (!rcItemsPending)
+                    {
+                        Thread.Sleep(1); //sleep if there's nothing to do
+                    }
 #if !DEBUG
                     }
                     catch (Exception ex)
@@ -4465,11 +4475,11 @@ namespace CodeWalker
                 try
                 {
 #endif
-                    bool fcItemsPending = gameFileCache.ContentThreadProc();
-                    if (!fcItemsPending)
-                    {
-                        Thread.Sleep(1); //sleep if there's nothing to do
-                    }
+                bool fcItemsPending = gameFileCache.ContentThreadProc();
+                if (!fcItemsPending)
+                {
+                    Thread.Sleep(1); //sleep if there's nothing to do
+                }
 #if !DEBUG
                 }
                 catch (Exception ex)
@@ -6157,6 +6167,9 @@ namespace CodeWalker
         private void WorldForm_Load(object sender, EventArgs e)
         {
             Init();
+            // 确保在所有初始化和布局之后设置 ToolsPanel 的宽度
+            ToolsPanel.Width = Settings.Default.ToolsPanelWidth;
+            toolspanellastwidth = ToolsPanel.Width;
         }
 
         private void WorldForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -7009,6 +7022,7 @@ namespace CodeWalker
         private void ToolsDragPanel_MouseUp(object sender, MouseEventArgs e)
         {
             toolsPanelResizing = false;
+            SaveToolsPanelWidth();
         }
 
         private void ToolsDragPanel_MouseMove(object sender, MouseEventArgs e)
@@ -8052,6 +8066,17 @@ namespace CodeWalker
         {
             SubtitleTimer.Enabled = false;
             SubtitleLabel.Visible = false;
+        }
+        private void ApplyToolsPanelWidth()
+        {
+            ToolsPanel.Width = Settings.Default.ToolsPanelWidth;
+            ToolsPanel.Left = this.ClientSize.Width - ToolsPanel.Width;
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            ToolsPanel.Left = this.ClientSize.Width - ToolsPanel.Width;
         }
     }
 

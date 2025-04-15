@@ -998,5 +998,17 @@ namespace CodeWalker.Properties {
                 this["ShowToolbarOnStartup"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("218")]
+        public int ToolsPanelWidth {
+            get {
+                return ((int)(this["ToolsPanelWidth"]));
+            }
+            set {
+                this["ToolsPanelWidth"] = value;
+            }
+        }
     }
 }
